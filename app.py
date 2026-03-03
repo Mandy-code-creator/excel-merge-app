@@ -1,96 +1,68 @@
-# ==========================================
-# EXCEL MERGE APP - STABLE FULL VERSION
-# ==========================================
-
 import streamlit as st
 import pandas as pd
 import io
 
-# ----------------------------
-# PAGE CONFIG
-# ----------------------------
-st.set_page_config(
-    page_title="Excel Merge App",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="Excel Merge & Export", layout="wide")
+st.title("📊 Merge Multiple Excel Files (.xls / .xlsx)")
 
-st.title("📊 Excel File Merger")
-st.write("Upload multiple Excel files and merge them into one master Excel file.")
+# =========================
+# Hàm đọc Excel an toàn
+# =========================
+def read_excel_safe(file):
+    try:
+        if file.name.endswith(".xlsx"):
+            df = pd.read_excel(file, engine="openpyxl")
+        elif file.name.endswith(".xls"):
+            try:
+                import xlrd
+            except ImportError:
+                st.error("Bạn chưa cài thư viện xlrd! Chạy: pip install xlrd")
+                return None
+            df = pd.read_excel(file, engine="xlrd")
+        else:
+            st.error("Chỉ hỗ trợ file .xls và .xlsx")
+            return None
+        return df
+    except Exception as e:
+        st.error(f"Lỗi khi đọc file {file.name}: {e}")
+        return None
 
-st.divider()
-
-# ----------------------------
-# FILE UPLOADER
-# ----------------------------
+# =========================
+# Upload nhiều file
+# =========================
 uploaded_files = st.file_uploader(
-    "Upload Excel files (.xlsx or .xls)",
-    type=["xlsx", "xls"],
+    "Chọn nhiều file Excel (.xls hoặc .xlsx)", 
+    type=["xls","xlsx"], 
     accept_multiple_files=True
 )
 
-# ----------------------------
-# MAIN LOGIC
-# ----------------------------
+dfs = []
+
 if uploaded_files:
+    for file in uploaded_files:
+        df = read_excel_safe(file)
+        if df is not None:
+            dfs.append(df)
 
-    st.info(f"Total files uploaded: {len(uploaded_files)}")
+    if dfs:
+        # =========================
+        # Gộp DataFrame
+        # =========================
+        df_all = pd.concat(dfs, ignore_index=True)
+        st.success(f"✅ Gộp thành công {len(dfs)} file, tổng {df_all.shape[0]} dòng")
+        st.dataframe(df_all)
 
-    all_data = []
-    progress_bar = st.progress(0)
-
-    for i, file in enumerate(uploaded_files):
-
-        try:
-            # Read all sheets inside each Excel file
-            excel_data = pd.read_excel(file, sheet_name=None)
-
-            for sheet_name, df in excel_data.items():
-
-                # Add source tracking columns
-                df["Source_File"] = file.name
-                df["Sheet_Name"] = sheet_name
-
-                all_data.append(df)
-
-        except Exception as e:
-            st.error(f"Error reading {file.name}: {e}")
-
-        progress_bar.progress((i + 1) / len(uploaded_files))
-
-    if all_data:
-
-        # Merge all dataframes
-        merged_df = pd.concat(all_data, ignore_index=True)
-
-        st.success("✅ Merge completed successfully!")
-
-        # Preview
-        st.subheader("Preview Merged Data")
-        st.dataframe(merged_df.head(20), use_container_width=True)
-
-        st.write(f"Total Rows: {len(merged_df)}")
-        st.write(f"Total Columns: {len(merged_df.columns)}")
-
-        # ----------------------------
-        # EXPORT TO EXCEL
-        # ----------------------------
+        # =========================
+        # Xuất file Excel
+        # =========================
         output = io.BytesIO()
-
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            merged_df.to_excel(writer, index=False, sheet_name="Merged_Data")
-
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df_all.to_excel(writer, index=False, sheet_name="Sheet1")
         output.seek(0)
 
         st.download_button(
-            label="📥 Download Merged Excel File",
+            label="📥 Tải file Excel đã gộp",
             data=output,
-            file_name="Merged_Output.xlsx",
+            file_name="gop_file.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
-    else:
-        st.warning("No valid data to merge.")
-
-else:
-    st.info("Please upload at least one Excel file.")
