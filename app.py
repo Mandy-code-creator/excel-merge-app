@@ -5,19 +5,12 @@ import io
 st.set_page_config(page_title="Excel Merge & Export", layout="wide")
 st.title("📊 Merge Multiple Excel Files (.xls / .xlsx)")
 
-# =========================
-# Hàm đọc Excel an toàn
-# =========================
 def read_excel_safe(file):
     try:
         if file.name.endswith(".xlsx"):
             df = pd.read_excel(file, engine="openpyxl")
         elif file.name.endswith(".xls"):
-            try:
-                import xlrd
-            except ImportError:
-                st.error("Bạn chưa cài thư viện xlrd! Chạy: pip install xlrd")
-                return None
+            import xlrd
             df = pd.read_excel(file, engine="xlrd")
         else:
             st.error("Chỉ hỗ trợ file .xls và .xlsx")
@@ -27,9 +20,6 @@ def read_excel_safe(file):
         st.error(f"Lỗi khi đọc file {file.name}: {e}")
         return None
 
-# =========================
-# Upload nhiều file
-# =========================
 uploaded_files = st.file_uploader(
     "Chọn nhiều file Excel (.xls hoặc .xlsx)", 
     type=["xls","xlsx"], 
@@ -45,16 +35,10 @@ if uploaded_files:
             dfs.append(df)
 
     if dfs:
-        # =========================
-        # Gộp DataFrame
-        # =========================
         df_all = pd.concat(dfs, ignore_index=True)
         st.success(f"✅ Gộp thành công {len(dfs)} file, tổng {df_all.shape[0]} dòng")
         st.dataframe(df_all)
 
-        # =========================
-        # Xuất file Excel
-        # =========================
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df_all.to_excel(writer, index=False, sheet_name="Sheet1")
