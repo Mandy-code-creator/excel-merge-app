@@ -2,27 +2,12 @@ import streamlit as st
 import pandas as pd
 import io
 
-st.set_page_config(page_title="Excel Merge & Export", layout="wide")
-st.title("📊 Merge Multiple Excel Files (.xls / .xlsx)")
-
-def read_excel_safe(file):
-    try:
-        if file.name.endswith(".xlsx"):
-            df = pd.read_excel(file, engine="openpyxl")
-        elif file.name.endswith(".xls"):
-            import xlrd
-            df = pd.read_excel(file, engine="xlrd")
-        else:
-            st.error("Chỉ hỗ trợ file .xls và .xlsx")
-            return None
-        return df
-    except Exception as e:
-        st.error(f"Lỗi khi đọc file {file.name}: {e}")
-        return None
+st.set_page_config(page_title="Merge Excel Files", layout="wide")
+st.title("📊 Merge Multiple Excel Files (.xlsx only)")
 
 uploaded_files = st.file_uploader(
-    "Chọn nhiều file Excel (.xls hoặc .xlsx)", 
-    type=["xls","xlsx"], 
+    "Chọn nhiều file Excel (.xlsx)", 
+    type=["xlsx"], 
     accept_multiple_files=True
 )
 
@@ -30,9 +15,11 @@ dfs = []
 
 if uploaded_files:
     for file in uploaded_files:
-        df = read_excel_safe(file)
-        if df is not None:
+        try:
+            df = pd.read_excel(file, engine="openpyxl")
             dfs.append(df)
+        except Exception as e:
+            st.error(f"Lỗi khi đọc file {file.name}: {e}")
 
     if dfs:
         df_all = pd.concat(dfs, ignore_index=True)
