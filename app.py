@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
-import io
-import gc  # Thư viện Garbage Collector để ép hệ thống xóa bộ nhớ rác
+import gc
+import os
 
 st.set_page_config(page_title="Merge Excel Files", layout="wide")
-st.title("📊 Merge Multiple Excel Files (Bản Tối Ưu RAM)")
-
-st.info("💡 Mẹo dành cho file lớn: Ứng dụng khuyên dùng xuất ra file dạng `.CSV` để tải về nhanh hơn và tránh làm sập hệ thống.")
+st.title("📊 Merge Multiple Excel Files (Bản Siêu Tối Ưu)")
 
 # Upload nhiều file Excel
 uploaded_files = st.file_uploader(
@@ -15,60 +13,50 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
+# Sử dụng Session State để lưu trạng thái, tránh việc code chạy lại từ đầu khi bấm Download
+if 'file_ready' not in st.session_state:
+    st.session_state['file_ready'] = False
+
 if uploaded_files:
-    dfs = []
-    for file in uploaded_files:
-        try:
-            # Đọc bằng calamine rất nhẹ RAM
-            df = pd.read_excel(file, engine="calamine")
-            dfs.append(df)
-        except Exception as e:
-            st.error(f"Lỗi khi đọc file {file.name}: {e}")
+    # Nút bấm để chủ động gộp, không gộp tự động
+    if st.button("🚀 Bắt đầu gộp file"):
+        with st.spinner("Đang xử lý và tối ưu bộ nhớ, vui lòng đợi..."):
+            dfs = []
+            for file in uploaded_files:
+                try:
+                    # Đọc bằng calamine cực nhẹ RAM
+                    df = pd.read_excel(file, engine="calamine")
+                    dfs.append(df)
+                except Exception as e:
+                    st.error(f"Lỗi khi đọc file {file.name}: {e}")
 
-    if dfs:
-        # Gộp tất cả DataFrame
-        df_all = pd.concat(dfs, ignore_index=True)
-        st.success(f"✅ Gộp thành công {len(dfs)} file, tổng {df_all.shape[0]} dòng")
-        
-        # Chỉ hiển thị 50 dòng đầu để tránh đơ trình duyệt
-        st.write("Xem trước 50 dòng đầu tiên của file đã gộp:")
-        st.dataframe(df_all.head(50))
+            if dfs:
+                # Gộp tất cả DataFrame
+                df_all = pd.concat(dfs, ignore_index=True)
+                st.success(f"✅ Gộp thành công {len(dfs)} file, tổng {df_all.shape[0]} dòng")
+                
+                # 🔥 LƯU THẲNG RA Ổ ĐĨA TẠM CỦA SERVER THAY VÌ GIỮ TRONG RAM
+                temp_file_path = "gop_file_hoanthanh.csv"
+                df_all.to_csv(temp_file_path, index=False, encoding='utf-8-sig')
+                
+                # 🔥 DỌN SẠCH RAM NGAY LẬP TỨC TRƯỚC KHI TẠO NÚT TẢI
+                del dfs
+                del df_all
+                gc.collect() 
 
-        # 🔥 BƯỚC QUAN TRỌNG: GIẢI PHÓNG RAM LẬP TỨC
-        del dfs       # Xóa danh sách các file lẻ cũ khỏi bộ nhớ
-        gc.collect()  # Ép server dọn rác và giải phóng RAM ngay lập tức
+                # Đánh dấu là file đã tạo xong
+                st.session_state['file_ready'] = True
+                st.session_state['file_path'] = temp_file_path
 
-        # -------------------------------------------------------------
-        # PHƯƠNG ÁN 1 (KHUYÊN DÙNG): Xuất ra file CSV (Tốn ít RAM, không bao giờ treo)
-        # -------------------------------------------------------------
-        # utf-8-sig giúp file CSV khi mở bằng Excel trên máy tính không bị lỗi font Tiếng Việt/Trung
-        csv_data = df_all.to_csv(index=False).encode('utf-8-sig')
-        
+# Nút download chỉ hiện ra khi file đã được ghi xong vào ổ cứng
+if st.session_state.get('file_ready') and os.path.exists(st.session_state.get('file_path', '')):
+    st.info("💡 File đã sẵn sàng để tải về. RAM đã được giải phóng để chống sập server.")
+    
+    # Đọc trực tiếp từ ổ cứng, Streamlit xử lý việc này rất tiết kiệm RAM
+    with open(st.session_state['file_path'], "rb") as file_to_download:
         st.download_button(
-            label="📥 Tải file đã gộp (Định dạng .CSV - Khuyên dùng cho file nặng)",
-            data=csv_data,
+            label="📥 Tải file đã gộp (Định dạng .CSV)",
+            data=file_to_download,
             file_name="gop_file_hoanthanh.csv",
             mime="text/csv"
         )
-
-        # -------------------------------------------------------------
-        # PHƯƠNG ÁN 2 (TÙY CHỌN): Nếu bắt buộc phải lấy file .XLSX (Excel)
-        # -------------------------------------------------------------
-        with st.expander("Bạn bắt buộc phải lấy định dạng Excel (.xlsx)?"):
-            st.warning("⚠️ Lưu ý: Tạo file Excel cho dữ liệu > 100MB rất dễ làm sập server Streamlit Cloud do giới hạn RAM 1GB.")
-            if st.button("Bấm vào đây để cố gắng tạo file Excel"):
-                with st.spinner("Đang xử lý tạo file Excel... Xin vui lòng đợi."):
-                    try:
-                        output = io.BytesIO()
-                        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                            df_all.to_excel(writer, index=False, sheet_name="Sheet1")
-                        output.seek(0)
-                        
-                        st.download_button(
-                            label="📥 Tải file định dạng Excel (.xlsx)",
-                            data=output,
-                            file_name="gop_file_hoanthanh.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                    except Exception as excel_error:
-                        st.error(f"Không thể tạo file Excel do server cạn kiệt RAM: {excel_error}. Hãy dùng nút tải file .CSV ở trên!")
