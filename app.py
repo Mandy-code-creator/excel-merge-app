@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
-import io
 import gc
 
 st.set_page_config(page_title="Merge Excel Files", layout="wide")
-st.title("📊 Merge Multiple Excel Files (.xlsx only)")
+st.title("📊 Merge Multiple Excel Files (Bản Xuất CSV Chống Sập)")
+
+st.warning("⚠️ Đã chuyển đổi sang định dạng CSV để bảo vệ RAM server không bị sập.")
 
 # Upload nhiều file Excel
 uploaded_files = st.file_uploader(
@@ -13,51 +14,44 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
-# Tạo bộ nhớ tạm để giữ nút download không làm sập app
-if 'file_ready' not in st.session_state:
-    st.session_state['file_ready'] = False
-    st.session_state['output_excel'] = None
+if 'csv_ready' not in st.session_state:
+    st.session_state['csv_ready'] = False
+    st.session_state['csv_data'] = None
 
 if uploaded_files:
-    # Đưa việc gộp file vào 1 nút bấm để kiểm soát
     if st.button("🚀 Tiến hành gộp file"):
         with st.spinner("Đang xử lý dữ liệu..."):
             dfs = []
             for file in uploaded_files:
                 try:
-                    # Dùng calamine ở đây để đọc siêu nhanh và không tốn RAM
+                    # Đọc bằng calamine siêu nhẹ
                     df = pd.read_excel(file, engine="calamine")
                     dfs.append(df)
                 except Exception as e:
                     st.error(f"Lỗi khi đọc file {file.name}: {e}")
 
             if dfs:
-                # Gộp tất cả DataFrame (Giữ nguyên toàn bộ các cột như code gốc)
                 df_all = pd.concat(dfs, ignore_index=True)
                 st.success(f"✅ Gộp thành công {len(dfs)} file, tổng {df_all.shape[0]} dòng")
                 
-                # Chỉ hiện 100 dòng đầu để trình duyệt không bị đơ
-                st.dataframe(df_all.head(100))
+                # Xem trước 50 dòng
+                st.dataframe(df_all.head(50))
 
-                # Xuất file Excel trong bộ nhớ
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    df_all.to_excel(writer, index=False, sheet_name="Sheet1")
-                
-                # Lưu file đã tạo vào session_state
-                st.session_state['output_excel'] = output.getvalue()
-                st.session_state['file_ready'] = True
+                # 🔥 XUẤT THẲNG RA CSV - KHÔNG DÙNG OPENPYXL NÊN CỰC KỲ KHỎE RAM
+                # utf-8-sig giúp khi mở file CSV này bằng phần mềm Excel trên máy tính không bị lỗi font Tiếng Việt/Trung
+                st.session_state['csv_data'] = df_all.to_csv(index=False).encode('utf-8-sig')
+                st.session_state['csv_ready'] = True
 
-                # 🔥 DỌN DẸP BỘ NHỚ RAM NGAY LẬP TỨC
+                # Giải phóng bộ nhớ ngay lập tức
                 del dfs
                 del df_all
                 gc.collect()
 
-# Nút download tách biệt hoàn toàn, không làm app chạy lại code bên trên
-if st.session_state['file_ready'] and st.session_state['output_excel']:
+# Nút download an toàn
+if st.session_state['csv_ready'] and st.session_state['csv_data']:
     st.download_button(
-        label="📥 Tải file Excel đã gộp (.xlsx)",
-        data=st.session_state['output_excel'],
-        file_name="gop_file.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        label="📥 Tải file kết quả đã gộp (.CSV)",
+        data=st.session_state['csv_data'],
+        file_name="gop_file_hoanthanh.csv",
+        mime="text/csv"
     )
