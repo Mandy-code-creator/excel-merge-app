@@ -1,3 +1,7 @@
 streamlit
 pandas
+numpy
+plotly
+scipy
 openpyxl
+python-calamine
