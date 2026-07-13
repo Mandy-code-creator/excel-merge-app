@@ -17,8 +17,8 @@ dfs = []
 if uploaded_files:
     for file in uploaded_files:
         try:
-            # Chỉ đọc .xlsx với openpyxl
-            df = pd.read_excel(file, engine="openpyxl")
+            # Thay thế engine="openpyxl" bằng engine="calamine" tại đây
+            df = pd.read_excel(file, engine="calamine")
             dfs.append(df)
         except Exception as e:
             st.error(f"Lỗi khi đọc file {file.name}: {e}")
@@ -27,7 +27,10 @@ if uploaded_files:
         # Gộp tất cả DataFrame
         df_all = pd.concat(dfs, ignore_index=True)
         st.success(f"✅ Gộp thành công {len(dfs)} file, tổng {df_all.shape[0]} dòng")
-        st.dataframe(df_all)
+        
+        # Chỉ hiển thị 100 dòng đầu để tránh treo trình duyệt nếu dữ liệu quá lớn
+        st.write("Xem trước 100 dòng đầu tiên:")
+        st.dataframe(df_all.head(100))
 
         # Xuất file Excel trong bộ nhớ
         output = io.BytesIO()
